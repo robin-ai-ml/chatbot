@@ -8,9 +8,17 @@ import logging
 from threading import Thread
 from fastapi.responses import StreamingResponse
 import torch
+from datetime import datetime
+
+def get_current_time():
+    current_timestamp = datetime.now()
+    formated_time = current_timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    return formated_time
+
 
 app = FastAPI()
 
+'''
 # Allow CORS for all origins
 app.add_middleware(
     CORSMiddleware,
@@ -19,6 +27,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+'''
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,31 +41,37 @@ model.to(device)
 class ChatRequest(BaseModel):
     message: str
     history: list = []
-
-async def generate_response(message: str):
+def generate_response(message: str):
     inputs = tokenizer([message], return_tensors="pt").to(device)
     streamer = TextIteratorStreamer(tokenizer)
     
     # Run the generation in a separate thread
+
+    logging.info(f"before inference: {get_current_time()}")
+
     generation_kwargs = dict(inputs, streamer=streamer, max_new_tokens=1000)
     thread = Thread(target=model.generate, kwargs=generation_kwargs)
     thread.start()
+    logging.info(f"after inference : {get_current_time()}")
 
     for new_text in streamer:
         cleaned_text = tokenizer.decode(tokenizer.encode(new_text), skip_special_tokens=True).strip()
         if cleaned_text:
+            logging.info(f"yield next token : {cleaned_text} {get_current_time()}")
             yield f"{cleaned_text} "
+    logging.info(f"end next token: {get_current_time()}")
 
-@app.post("/chat")
+@app.get("/chat")
 async def chat_endpoint(chat_request: ChatRequest):
     message = chat_request.message
 
     # Debugging logs
-    logging.info(f"Received message: {message}")
+
+    logging.info(f"Received message: {message}, {get_current_time()}")
 
     try:
         return  StreamingResponse(generate_response(message), media_type="text/event-stream")
-
+        
     except Exception as e:
         logging.error(f"Error during generation: {str(e)}")
         return {"response": "An error occurred during generation."}
