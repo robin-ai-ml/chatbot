@@ -1,0 +1,8 @@
+fastapi
+vllm 
+gradio 
+einops 
+transformers_stream_generator
+accelerate
+optimum
+auto-gptq
